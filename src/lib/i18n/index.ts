@@ -3,8 +3,8 @@ import type { Language } from "@/types";
 
 export { translations };
 
-export function t(lang: Language): (typeof translations)["en"] {
-  return translations[lang] ?? translations.en;
+export function t(lang: Language): typeof translations[typeof lang] {
+  return (translations[lang] ?? translations.en) as typeof translations[typeof lang];
 }
 
 export function getLanguageFromBrowser(): Language {
