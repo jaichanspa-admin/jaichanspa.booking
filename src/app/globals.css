@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: "Josefin Sans", system-ui, sans-serif;
+    --font-sans: "Inter", system-ui, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cream-100 text-brand-dark antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* CI: Headings use Josefin Sans (expanded geometric — matches CI Anantason/Bernoru feel) */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-semibold tracking-widest uppercase;
+  }
+}
+
+@layer components {
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply bg-brand-terracotta text-cream-50 font-medium px-6 py-3 rounded-none
+           hover:bg-brand-brown transition-colors duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed
+           active:scale-[0.98] focus:outline-none focus:ring-2
+           focus:ring-brand-gold focus:ring-offset-2
+           tracking-widest uppercase text-sm;
+    font-family: var(--font-display);
+  }
+
+  .btn-secondary {
+    @apply border border-brand-border bg-transparent text-brand-dark font-medium
+           px-6 py-3 rounded-none hover:bg-cream-200 transition-colors duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed
+           active:scale-[0.98] focus:outline-none focus:ring-2
+           focus:ring-brand-gold focus:ring-offset-2
+           tracking-widest uppercase text-sm;
+    font-family: var(--font-display);
+  }
+
+  .btn-danger {
+    @apply bg-red-700 text-white font-medium px-6 py-3 rounded-none
+           hover:bg-red-800 transition-colors duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed
+           tracking-widest uppercase text-sm;
+    font-family: var(--font-display);
+  }
+
+  /* ── Cards ── */
+  .card {
+    @apply bg-cream-50 border border-brand-border shadow-none;
+  }
+
+  /* ── Inputs ── */
+  .input {
+    @apply w-full border border-brand-border px-4 py-3
+           bg-cream-50 text-brand-dark placeholder-brand-light-brown
+           focus:outline-none focus:ring-1 focus:ring-brand-gold
+           focus:border-brand-gold transition-all duration-200
+           disabled:bg-cream-200 disabled:cursor-not-allowed
+           text-sm rounded-none;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-brand-light-brown mb-1.5 uppercase tracking-widest;
+    font-family: var(--font-display);
+  }
+
+  .error-msg {
+    @apply text-red-600 text-xs mt-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-3 py-1 text-xs font-medium tracking-wider uppercase;
+    font-family: var(--font-display);
+  }
+
+  /* ── Section headings ── */
+  .section-title {
+    @apply text-xs tracking-brand-wide uppercase text-brand-light-brown font-medium;
+    font-family: var(--font-display);
+  }
+}
