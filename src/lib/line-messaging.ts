@@ -1,88 +1,232 @@
 import type { BookingWithRelations } from "@/types";
-import { formatDate, formatTime, formatPrice } from "./booking-utils";
+import { formatTime, formatPrice } from "./booking-utils";
 
-const LINE_CHANNEL_ACCESS_TOKEN =
-  process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "MOCK_TOKEN";
-const LINE_RECEPTION_GROUP_ID =
-  process.env.LINE_RECEPTION_GROUP_ID ?? "MOCK_GROUP_ID";
+const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+const GROUP_ID = process.env.LINE_RECEPTION_GROUP_ID ?? "";
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://jai-chan-booking.vercel.app";
 
-const IS_MOCK = !process.env.LINE_CHANNEL_ACCESS_TOKEN;
+const IS_MOCK = !TOKEN;
+
+// ─── Core push helper ─────────────────────────────────────────────────────────
 
 async function pushMessage(to: string, messages: object[]): Promise<void> {
-  if (IS_MOCK) {
-    console.log("[LINE MOCK] Push to:", to, JSON.stringify(messages, null, 2));
+  if (IS_MOCK || !to || to.startsWith("MOCK")) {
+    console.log("[LINE MOCK] push →", to, JSON.stringify(messages, null, 2));
     return;
   }
-
   const res = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${TOKEN}`,
     },
     body: JSON.stringify({ to, messages }),
   });
-
   if (!res.ok) {
-    const error = await res.text();
-    console.error("[LINE] Push failed:", error);
+    console.error("[LINE] push failed:", await res.text());
   }
 }
 
-function buildBookingText(booking: BookingWithRelations): string {
-  return [
-    `📋 Booking: ${booking.booking_code}`,
-    `👤 ${booking.customer.first_name} ${booking.customer.last_name} (${booking.customer.nationality})`,
-    `📞 ${booking.customer.phone}`,
-    `💆 ${booking.service_name_snapshot} — ${booking.duration_minutes} mins`,
-    `📅 ${booking.requested_date} ${formatTime(booking.requested_time)} - ${formatTime(booking.requested_end_time)}`,
-    `💰 ${formatPrice(booking.price_snapshot)}`,
-  ].join("\n");
+async function replyMessage(replyToken: string, messages: object[]): Promise<void> {
+  if (!TOKEN) return;
+  const res = await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${TOKEN}`,
+    },
+    body: JSON.stringify({ replyToken, messages }),
+  });
+  if (!res.ok) {
+    console.error("[LINE] reply failed:", await res.text());
+  }
 }
+
+// ─── Flex Message builders ─────────────────────────────────────────────────────
+
+function infoRow(label: string, value: string) {
+  return {
+    type: "box",
+    layout: "horizontal",
+    spacing: "sm",
+    contents: [
+      {
+        type: "text",
+        text: label,
+        size: "xs",
+        color: "#999999",
+        flex: 3,
+      },
+      {
+        type: "text",
+        text: value,
+        size: "xs",
+        color: "#333333",
+        flex: 7,
+        wrap: true,
+        weight: "bold",
+      },
+    ],
+  };
+}
+
+function buildNewBookingFlex(booking: BookingWithRelations) {
+  const adminUrl = `${APP_URL}/admin/bookings/${booking.id}`;
+  const customerName = `${booking.customer.first_name} ${booking.customer.last_name}`;
+  const dateTime = `${booking.requested_date}  ${formatTime(booking.requested_time)} – ${formatTime(booking.requested_end_time)}`;
+
+  return {
+    type: "flex",
+    altText: `🔔 การจองใหม่ ${booking.booking_code} — ${customerName}`,
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#1a1a1a",
+        paddingAll: "16px",
+        contents: [
+          {
+            type: "box",
+            layout: "horizontal",
+            contents: [
+              {
+                type: "text",
+                text: "🔔  การจองใหม่",
+                color: "#d4a855",
+                size: "sm",
+                weight: "bold",
+                flex: 1,
+              },
+              {
+                type: "text",
+                text: booking.booking_code,
+                color: "#888888",
+                size: "xs",
+                align: "end",
+              },
+            ],
+          },
+        ],
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "16px",
+        contents: [
+          infoRow("ลูกค้า", `${customerName} (${booking.customer.nationality})`),
+          infoRow("โทร", booking.customer.phone),
+          infoRow("บริการ", `${booking.service_name_snapshot} ${booking.duration_minutes} นาที`),
+          infoRow("วัน/เวลา", dateTime),
+          infoRow("ราคา", formatPrice(booking.price_snapshot)),
+          {
+            type: "separator",
+            margin: "md",
+          },
+          {
+            type: "text",
+            text: "⏳ รอการยืนยัน",
+            size: "xs",
+            color: "#e67700",
+            margin: "md",
+            weight: "bold",
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "12px",
+        contents: [
+          {
+            type: "box",
+            layout: "horizontal",
+            spacing: "sm",
+            contents: [
+              {
+                type: "button",
+                action: {
+                  type: "postback",
+                  label: "✅ ยืนยัน",
+                  data: `action=confirm&id=${booking.id}`,
+                  displayText: `✅ ยืนยันการจอง ${booking.booking_code}`,
+                },
+                style: "primary",
+                color: "#2d7d2d",
+                height: "sm",
+                flex: 1,
+              },
+              {
+                type: "button",
+                action: {
+                  type: "postback",
+                  label: "❌ ปฏิเสธ",
+                  data: `action=reject&id=${booking.id}`,
+                  displayText: `❌ ปฏิเสธการจอง ${booking.booking_code}`,
+                },
+                style: "primary",
+                color: "#cc3333",
+                height: "sm",
+                flex: 1,
+              },
+            ],
+          },
+          {
+            type: "button",
+            action: {
+              type: "uri",
+              label: "🕐 เสนอเวลาใหม่ / รายละเอียด",
+              uri: adminUrl,
+            },
+            style: "secondary",
+            height: "sm",
+          },
+        ],
+      },
+    },
+  };
+}
+
+// ─── Exported notification functions ──────────────────────────────────────────
 
 export async function notifyReceptionNewBooking(
   booking: BookingWithRelations
 ): Promise<void> {
-  const text = [
-    "🔔 NEW BOOKING REQUEST",
-    "",
-    buildBookingText(booking),
-    "",
-    "⏳ Status: Pending",
-    "Please check availability and confirm or propose a new time.",
-  ].join("\n");
-
-  await pushMessage(LINE_RECEPTION_GROUP_ID, [{ type: "text", text }]);
+  if (!GROUP_ID) {
+    console.warn("[LINE] LINE_RECEPTION_GROUP_ID not set — skipping group notify");
+    return;
+  }
+  await pushMessage(GROUP_ID, [buildNewBookingFlex(booking)]);
 }
 
 export async function notifyCustomerBookingReceived(
   booking: BookingWithRelations
 ): Promise<void> {
   if (!booking.customer.line_user_id) return;
-
   const texts: Record<string, string> = {
-    en: `✅ Booking request received!\n\n${buildBookingText(booking)}\n\nStatus: Waiting for confirmation. We will notify you shortly.`,
-    th: `✅ ส่งคำขอจองสำเร็จ!\n\n${buildBookingText(booking)}\n\nสถานะ: รอเจ้าหน้าที่ตรวจสอบ เราจะแจ้งผลให้เร็ว ๆ นี้`,
-    cn: `✅ 预约请求已收到！\n\n${buildBookingText(booking)}\n\n状态：等待确认，我们将尽快通知您。`,
+    en: `✅ Booking request received!\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes} mins\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)}\n\nWe'll confirm your booking shortly via LINE.`,
+    th: `✅ รับเรื่องการจองแล้ว!\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes} นาที\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)}\n\nเราจะแจ้งผลการยืนยันผ่าน LINE เร็ว ๆ นี้`,
+    cn: `✅ 预约请求已收到！\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes}分钟\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)}\n\n我们将尽快通过LINE确认您的预约。`,
   };
-
   const lang = booking.customer.preferred_language ?? "en";
-  const text = texts[lang] ?? texts.en;
-
-  await pushMessage(booking.customer.line_user_id, [{ type: "text", text }]);
+  await pushMessage(booking.customer.line_user_id, [
+    { type: "text", text: texts[lang] ?? texts.en },
+  ]);
 }
 
 export async function notifyCustomerConfirmed(
   booking: BookingWithRelations
 ): Promise<void> {
   if (!booking.customer.line_user_id) return;
-
   const texts: Record<string, string> = {
-    en: `🎉 Booking Confirmed!\n\n${buildBookingText(booking)}\n\nWe look forward to welcoming you. Please arrive 5 minutes early.\n\n📍 JAI CHAN SPA, Siam Discovery`,
-    th: `🎉 ยืนยันการจองแล้ว!\n\n${buildBookingText(booking)}\n\nยินดีต้อนรับคุณ กรุณามาก่อนเวลา 5 นาที\n\n📍 JAI CHAN SPA, สยามดิสคัฟเวอรี่`,
-    cn: `🎉 预约已确认！\n\n${buildBookingText(booking)}\n\n期待您的光临，请提前5分钟到达。\n\n📍 JAI CHAN SPA，Siam Discovery`,
+    en: `🎉 Booking Confirmed!\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes} mins\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)} – ${formatTime(booking.requested_end_time)}\n💰 ${formatPrice(booking.price_snapshot)}\n\nSee you soon! Please arrive 5 minutes early.\n📍 JAI CHAN SPA, Siam Discovery`,
+    th: `🎉 ยืนยันการจองแล้ว!\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes} นาที\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)} – ${formatTime(booking.requested_end_time)}\n💰 ${formatPrice(booking.price_snapshot)}\n\nพบกันเร็ว ๆ นี้! กรุณามาก่อนเวลา 5 นาที\n📍 JAI CHAN SPA, สยามดิสคัฟเวอรี่`,
+    cn: `🎉 预约已确认！\n\n📋 ${booking.booking_code}\n💆 ${booking.service_name_snapshot} — ${booking.duration_minutes}分钟\n📅 ${booking.requested_date}  ${formatTime(booking.requested_time)} – ${formatTime(booking.requested_end_time)}\n💰 ${formatPrice(booking.price_snapshot)}\n\n期待您的光临！请提前5分钟到达。\n📍 JAI CHAN SPA，Siam Discovery`,
   };
-
   const lang = booking.customer.preferred_language ?? "en";
   await pushMessage(booking.customer.line_user_id, [
     { type: "text", text: texts[lang] ?? texts.en },
@@ -94,17 +238,12 @@ export async function notifyCustomerProposedTime(
   respondUrl: string
 ): Promise<void> {
   if (!booking.customer.line_user_id) return;
-
-  const proposed = [
-    `📅 ${booking.proposed_date} ${formatTime(booking.proposed_time!)} - ${formatTime(booking.proposed_end_time!)}`,
-  ].join("\n");
-
+  const proposed = `${booking.proposed_date}  ${formatTime(booking.proposed_time!)} – ${formatTime(booking.proposed_end_time!)}`;
   const texts: Record<string, string> = {
-    en: `⏰ New Time Proposed\n\nYour requested time is unavailable. Our team proposes:\n\n${proposed}\n\nService: ${booking.service_name_snapshot}\n\nPlease respond: ${respondUrl}`,
-    th: `⏰ เสนอวันเวลาใหม่\n\nเวลาที่คุณขอไม่ว่าง ทีมงานเสนอเวลาใหม่:\n\n${proposed}\n\nบริการ: ${booking.service_name_snapshot}\n\nกรุณาตอบรับ: ${respondUrl}`,
-    cn: `⏰ 提议新时间\n\n您所请求的时间不可用，我们提议新时间：\n\n${proposed}\n\n服务：${booking.service_name_snapshot}\n\n请回复：${respondUrl}`,
+    en: `⏰ New Time Proposed\n\n📋 ${booking.booking_code}\nYour original time is unavailable. We propose:\n\n📅 ${proposed}\n💆 ${booking.service_name_snapshot}\n\nAccept or decline: ${respondUrl}`,
+    th: `⏰ เสนอวันเวลาใหม่\n\n📋 ${booking.booking_code}\nเวลาเดิมไม่ว่าง ทีมงานขอเสนอเวลาใหม่:\n\n📅 ${proposed}\n💆 ${booking.service_name_snapshot}\n\nกรุณาตอบรับหรือปฏิเสธ: ${respondUrl}`,
+    cn: `⏰ 提议新时间\n\n📋 ${booking.booking_code}\n您所请求的时间不可用，我们提议：\n\n📅 ${proposed}\n💆 ${booking.service_name_snapshot}\n\n请接受或拒绝：${respondUrl}`,
   };
-
   const lang = booking.customer.preferred_language ?? "en";
   await pushMessage(booking.customer.line_user_id, [
     { type: "text", text: texts[lang] ?? texts.en },
@@ -115,15 +254,23 @@ export async function notifyCustomerRejected(
   booking: BookingWithRelations
 ): Promise<void> {
   if (!booking.customer.line_user_id) return;
-
+  const reason = booking.rejection_reason ?? "คิวเต็ม / Fully booked";
   const texts: Record<string, string> = {
-    en: `😔 Booking Unavailable\n\nUnfortunately we cannot accommodate your booking at this time.\n\nReason: ${booking.rejection_reason ?? "Fully booked"}\n\nPlease contact us to reschedule: +66 XX XXX XXXX\n📍 JAI CHAN SPA, Siam Discovery`,
-    th: `😔 ไม่สามารถรับจองได้\n\nขออภัย เราไม่สามารถรับการจองของคุณในขณะนี้\n\nเหตุผล: ${booking.rejection_reason ?? "คิวเต็ม"}\n\nกรุณาติดต่อเพื่อนัดหมายใหม่: +66 XX XXX XXXX\n📍 JAI CHAN SPA, สยามดิสคัฟเวอรี่`,
-    cn: `😔 预约不可用\n\n很遗憾，我们目前无法接受您的预约。\n\n原因：${booking.rejection_reason ?? "已满"}\n\n请联系我们重新安排：+66 XX XXX XXXX\n📍 JAI CHAN SPA，Siam Discovery`,
+    en: `😔 Booking Unavailable\n\n📋 ${booking.booking_code}\n${booking.service_name_snapshot}\n\nReason: ${reason}\n\nPlease contact us to reschedule or walk in anytime.\n📍 JAI CHAN SPA, Siam Discovery`,
+    th: `😔 ไม่สามารถรับจองได้\n\n📋 ${booking.booking_code}\n${booking.service_name_snapshot}\n\nเหตุผล: ${reason}\n\nติดต่อเราเพื่อนัดใหม่ หรือ walk-in ได้เลย\n📍 JAI CHAN SPA, สยามดิสคัฟเวอรี่`,
+    cn: `😔 预约不可用\n\n📋 ${booking.booking_code}\n${booking.service_name_snapshot}\n\n原因：${reason}\n\n请联系我们重新安排或直接到店。\n📍 JAI CHAN SPA，Siam Discovery`,
   };
-
   const lang = booking.customer.preferred_language ?? "en";
   await pushMessage(booking.customer.line_user_id, [
     { type: "text", text: texts[lang] ?? texts.en },
   ]);
+}
+
+// ─── Reply to reception after action ─────────────────────────────────────────
+
+export async function replyActionResult(
+  replyToken: string,
+  text: string
+): Promise<void> {
+  await replyMessage(replyToken, [{ type: "text", text }]);
 }
