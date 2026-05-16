@@ -34,6 +34,31 @@ export async function GET() {
 // ─── Event handler ─────────────────────────────────────────────────────────
 
 async function handleEvent(event: Record<string, unknown>) {
+  // ── Auto-reply Group ID when anyone sends "groupid" in the group ────────────
+  if (event.type === "message") {
+    const source = event.source as Record<string, string> | undefined;
+    const msg = event.message as Record<string, string> | undefined;
+    const replyToken = event.replyToken as string;
+    const groupId = source?.groupId ?? "";
+    const text = (msg?.text ?? "").toLowerCase().trim();
+
+    if (groupId && text === "groupid") {
+      const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+      await fetch("https://api.line.me/v2/bot/message/reply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({
+          replyToken,
+          messages: [{ type: "text", text: `Group ID:\n${groupId}` }],
+        }),
+      });
+    }
+    return;
+  }
+
   if (event.type !== "postback") return;
 
   const replyToken = event.replyToken as string;
